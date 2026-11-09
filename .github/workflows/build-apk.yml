@@ -29,19 +29,28 @@ jobs:
 
       - name: Extract Android project
         run: |
+          set -euxo pipefail
           mkdir -p extracted
-          unzip -q Al-chat-Android-project.zip -d extracted
-          test -f extracted/AlChat/settings.gradle.kts
+          unzip -q "$GITHUB_WORKSPACE/Al-chat-Android-project.zip" -d extracted
+          find extracted -maxdepth 5 -name settings.gradle.kts
+          PROJECT_DIR="$(dirname "$(find extracted -name settings.gradle.kts -print -quit)")"
+          if [ "$PROJECT_DIR" = "." ] || [ -z "$PROJECT_DIR" ]; then
+            echo "Не найден settings.gradle.kts"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
         run: |
-          gradle --no-daemon \
-            -p extracted/AlChat \
-            :app:assembleDebug
+          gradle --no-daemon -p "$PROJECT_DIR" :app:assembleDebug
+
+      - name: Prepare APK
+        run: |
+          mkdir -p output
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Al-chat-APK
-          path: extracted/AlChat/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          path: output/app-debug.apk
