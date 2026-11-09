@@ -12,12 +12,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download project archive
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show archive contents
+        run: |
+          ls -lah
+          unzip -l Al-chat-Android-project.zip | head -80
 
       - name: Extract project
         run: |
+          mkdir -p project
           unzip -o Al-chat-Android-project.zip -d project
+          echo "Extracted files:"
+          find project -maxdepth 5 -type f | head -100
+
+      - name: Find Android project
+        run: |
+          SETTINGS=$(find project -type f -name settings.gradle.kts -print -quit)
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle.kts not found in archive"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -27,12 +44,17 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       - name: Build APK
-        run: gradle assembleDebug
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Al-chat-APK
-          path: project/AlChatTrader/app/build/outputs/apk/debug/app-debug.apk
+          path: project/**/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
