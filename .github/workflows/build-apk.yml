@@ -1,9 +1,9 @@
-name: Build AI CHAT PRO APK
+name: Build Al chat APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,52 +13,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          packages: platform-tools
-
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35"
-
-      - name: Install build tools
-        run: sdkmanager "build-tools;35.0.0"
-
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
-
-      - name: Extract project archive
-        run: |
-          mkdir extracted
-          unzip -q AI_CHAT_PRO_mobile_source-1.zip -d extracted
+          gradle-version: '8.7'
 
       - name: Build APK
-        run: |
-          SETTINGS_FILE="$(find extracted -name settings.gradle.kts -print -quit)"
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "settings.gradle.kts not found in archive"
-            exit 1
-          fi
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
-          mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp app/build/outputs/apk/debug/*.apk "$GITHUB_WORKSPACE/dist/"
+        run: gradle --no-daemon :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI-CHAT-PRO-APK
-          path: dist/*.apk
+          name: Al-chat-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
