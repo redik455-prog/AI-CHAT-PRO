@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>MATCH AI</title>
+<style>
+:root{color-scheme:dark;--bg:#090b10;--panel:#141923;--gold:#d7b46a;--muted:#929aaa;--line:#27303d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1c2029,#090b10 55%);color:#f4f1e9;font:15px system-ui,Arial}
+header{padding:22px 18px 14px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:24px;font-weight:900;letter-spacing:2px}.logo span{color:var(--gold)}.date{color:var(--muted);font-size:12px}
+main{padding:0 14px 30px;max-width:760px;margin:auto}.hero{background:linear-gradient(135deg,#222632,#121720);border:1px solid #343b49;border-radius:18px;padding:17px;margin-bottom:14px}
+h1{font-size:21px;margin:0 0 6px}.sub{color:var(--muted);font-size:13px;line-height:1.5}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}button,.btn{background:var(--gold);color:#15130e;border:0;border-radius:10px;padding:11px 14px;font-weight:800}
+button.secondary{background:#262e3b;color:#eee;border:1px solid #3a4352}
+input{background:#0c1119;border:1px solid #343e4d;color:#fff;border-radius:9px;padding:11px;width:100%;margin-top:8px}
+.toolbar{display:flex;gap:8px;align-items:center;margin:12px 0}.toolbar input{flex:1;margin:0}.count{color:var(--muted);font-size:12px;white-space:nowrap}
+.match{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px;margin:10px 0}
+.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-bottom:10px}.teams{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800}.team{width:42%;line-height:1.25}.team:last-child{text-align:right}.vs{color:var(--gold);font-size:11px}
+.picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:13px}
+.pick{background:#0d131c;border:1px solid #263342;border-radius:9px;padding:9px}.pick b{display:block;color:var(--gold);font-size:14px}.pick small{color:var(--muted);font-size:10px}
+.section{font-size:13px;color:var(--gold);font-weight:800;letter-spacing:1px;margin:20px 2px 8px}
+.notice{color:var(--muted);font-size:11px;line-height:1.5;margin:14px 2px}.status{color:var(--gold);font-size:12px;margin-top:8px;white-space:pre-wrap}
+.empty{text-align:center;padding:35px 12px;color:var(--muted);background:var(--panel);border-radius:14px}
+a{color:var(--gold)}
+</style></head><body>
+<header><div class="logo">MATCH <span>AI</span></div><div class="date" id="today"></div></header>
+<main>
+<section class="hero"><h1>Футбольные прогнозы на сегодня</h1><div class="sub">Все доступные лиги · расширенная аналитика · прогнозы на каждый матч</div>
+<div class="actions"><button onclick="loadMatches()">↻ Обновить матчи</button><button class="secondary" onclick="showSettings()">API настройки</button></div>
+<div id="status" class="status">Добавьте API-ключ API-FOOTBALL, чтобы загрузить расписание всех доступных лиг.</div></section>
+<div id="settings" class="hero" style="display:none"><b>Подключение данных API-Football</b><div class="sub">Нужен ключ API-FOOTBALL (API-Sports). Вставьте его ниже. Ключ хранится только на этом устройстве.</div>
+<input id="apiKey" type="password" placeholder="Ваш API-FOOTBALL ключ"><div class="actions"><button onclick="saveKey()">Сохранить ключ</button><button class="secondary" onclick="hideSettings()">Закрыть</button></div>
+<div class="notice">Получить ключ: <a href="https://www.api-football.com/">api-football.com</a>. Бесплатный тариф имеет лимиты запросов и может не включать все лиги.</div></div>
+<div class="toolbar"><input id="filter" placeholder="Поиск команды или лиги…" oninput="render()"><div class="count" id="count">0 матчей</div></div>
+<div id="matches"><div class="empty">Матчи появятся после подключения ключа и загрузки данных.</div></div>
+<div class="notice">Важно: прогнозы — статистические ориентиры, а не гарантии. Вероятности рассчитываются по недавним результатам команд, если API предоставляет эти данные. Не используйте их как финансовую рекомендацию.</div>
+</main>
+<script>
+const today=new Date(); const localDate=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+document.getElementById('today').textContent=today.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'long'});
+let games=[]; let apiKey=localStorage.getItem('matchai_key')||'';
+document.getElementById('apiKey').value=apiKey;
+function showSettings(){document.getElementById('settings').style.display='block'}function hideSettings(){document.getElementById('settings').style.display='none'}
+function saveKey(){apiKey=document.getElementById('apiKey').value.trim();localStorage.setItem('matchai_key',apiKey);hideSettings();loadMatches()}
+function status(s){document.getElementById('status').textContent=s}
+async function api(path){const r=await fetch('https://v3.football.api-sports.io/'+path,{headers:{'x-apisports-key':apiKey}});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(j.errors&&Object.keys(j.errors).length)throw Error(JSON.stringify(j.errors));return j.response||[]}
+async function loadMatches(){
+ if(!apiKey){showSettings();status('Для реальных матчей нужен API-ключ.');return}
+ status('Загружаем все матчи на '+localDate+'…');document.getElementById('matches').innerHTML='<div class="empty">Загрузка расписания…</div>';
+ try{
+  const data=await api('fixtures?date='+localDate+'&timezone='+encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin'));
+  games=data.map(x=>({id:x.fixture.id,league:x.league.name+' · '+x.league.country,time:new Date(x.fixture.date).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}),home:x.teams.home.name,away:x.teams.away.name,status:x.fixture.status.short,homeId:x.teams.home.id,awayId:x.teams.away.id,form:null}));
+  render();status('Загружено матчей: '+games.length+'. Рассчитываем оценки по последним играм…');
+  await enrichPredictions();render();status('Готово. Матчей на сегодня: '+games.length+'. Время показано по часовому поясу устройства.');
+ }catch(e){status('Не удалось загрузить данные: '+e.message+'\nПроверьте API-ключ и лимит запросов.');document.getElementById('matches').innerHTML='<div class="empty">Не удалось получить расписание. Проверьте ключ API и интернет.</div>'}
+}
+async function teamStats(id){
+ try{
+  const arr=await api('fixtures?team='+id+'&last=5');
+  let pts=0,gf=0,ga=0,hf=0,ha=0,n=0, statN=0;
+  let corners=0,yellow=0,red=0,shots=0,onTarget=0,fouls=0;
+  const finished=[];
+  for(const x of arr){
+   if(!['FT','AET','PEN'].includes(x.fixture.status.short))continue;
+   const isHome=x.teams.home.id===id,a=x.goals.home,b=x.goals.away;
+   if(a==null||b==null)continue;
+   const scored=isHome?a:b,conceded=isHome?b:a;
+   const htA=x.score?.halftime?.home,htB=x.score?.halftime?.away;
+   const htFor=htA==null||htB==null?null:(isHome?htA:htB);
+   const htAgainst=htA==null||htB==null?null:(isHome?htB:htA);
+   gf+=scored;ga+=conceded;pts+=scored>conceded?3:scored===conceded?1:0;
+   if(htFor!=null&&htAgainst!=null){hf+=htFor;ha+=htAgainst}
+   n++;finished.push({id:x.fixture.id});
+  }
+  // Match statistics are retrieved for a small recent sample. Some competitions/API plans
+  // do not expose every metric; unavailable metrics are shown as unavailable, not fabricated.
+  for(const f of finished.slice(0,3)){
+   try{
+    const rows=await api('fixtures/statistics?fixture='+f.id);
+    const teamRow=rows.find(r=>r.team&&r.team.id===id);
+    if(!teamRow)continue;
+    const get=(names)=>{const z=teamRow.statistics.find(s=>names.includes(String(s.type).toLowerCase()));if(z?.value==null)return null;return Number(String(z.value).replace('%',''))};
+    const c=get(['corner kicks']), y=get(['yellow cards']), rd=get(['red cards']);
+    const sh=get(['total shots']), ot=get(['shots on goal']), fo=get(['fouls']);
+    if(c!=null){corners+=c;statN++} if(y!=null)yellow+=y;if(rd!=null)red+=rd;
+    if(sh!=null)shots+=sh;if(ot!=null)onTarget+=ot;if(fo!=null)fouls+=fo;
+   }catch(e){}
+  }
+  return n?{
+   form:pts/(3*n),gf:gf/n,ga:ga/n,hf:n?hf/n:0,ha:n?ha/n:0,
+   corners:statN?corners/statN:null,yellow:statN?yellow/statN:null,
+   red:statN?red/statN:null,shots:statN?shots/statN:null,
+   onTarget:statN?onTarget/statN:null,fouls:statN?fouls/statN:null
+  }:null;
+ }catch(e){return null}
+}
+async function enrichPredictions(){
+ const ids=[...new Set(games.flatMap(g=>[g.homeId,g.awayId]))],stats={};
+ for(let i=0;i<ids.length;i++){
+  stats[ids[i]]=await teamStats(ids[i]);
+  // Keep calls gentle; API-Football request quotas depend on subscription.
+  await new Promise(r=>setTimeout(r,180));
+ }
+ games.forEach(g=>{g.hs=stats[g.homeId];g.as=stats[g.awayId];g.pred=makePred(g.hs,g.as)})
+}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function pct(x){return Math.round(clamp(x,0.02,.98)*100)}
+function makePred(h,a){
+ if(!h||!a)return null;
+ const edge=(h.form-a.form)*.34+(h.gf-a.gf)*.045+(a.ga-h.ga)*.035;
+ let home=clamp(.42+edge,.12,.76),draw=clamp(.27-Math.abs(edge)*.18,.14,.32),away=1-home-draw;
+ const totalGoals=h.gf+h.ga+a.gf+a.ga;
+ const over=(line)=>clamp(1/(1+Math.exp(-(totalGoals-line*1.02)*1.45)),.04,.96);
+ const btts=clamp(.35+(h.gf+a.gf-2)*.17,.15,.8);
+ const firstHalf=clamp((h.hf+h.ha+a.hf+a.ha)*.52,.15,.85);
+ const teamHome=clamp(.25+(h.gf+a.ga)*.17,.12,.9),teamAway=clamp(.25+(a.gf+h.ga)*.17,.12,.9);
+ const corners=(h.corners!=null&&a.corners!=null)?h.corners+a.corners:null;
+ const cards=(h.yellow!=null&&a.yellow!=null)?h.yellow+a.yellow:null;
+ const shots=(h.shots!=null&&a.shots!=null)?h.shots+a.shots:null;
+ const onTarget=(h.onTarget!=null&&a.onTarget!=null)?h.onTarget+a.onTarget:null;
+ const fouls=(h.fouls!=null&&a.fouls!=null)?h.fouls+a.fouls:null;
+ const halftimeHome=clamp(.37+edge*.65,.12,.72),halftimeDraw=clamp(.43-Math.abs(edge)*.25,.2,.55);
+ return {
+  home:pct(home),draw:pct(draw),away:pct(away),
+  dc1x:pct(home+draw),dc12:pct(home+away),dcx2:pct(draw+away),
+  o05:pct(over(.5)),o15:pct(over(1.5)),o25:pct(over(2.5)),o35:pct(over(3.5)),
+  u25:100-pct(over(2.5)),btts:pct(btts),noBtts:100-pct(btts),
+  firstHalf:pct(firstHalf),htHome:pct(halftimeHome),htDraw:pct(halftimeDraw),
+  homeGoal:pct(teamHome),awayGoal:pct(teamAway),
+  corners,cards,shots,onTarget,fouls,
+  score:(h.gf>=a.gf?'2:1':'1:2')
+ };
+}
+function predictionMarkup(p){
+ const item=(label,value,sub='Вероятность модели')=>`<div class="pick"><small>${label}</small><b>${value}</b><small>${sub}</small></div>`;
+ let out='';
+ out+='<div class="section">ИСХОД МАТЧА</div><div class="picks">';
+ out+=item('ПОБЕДА ХОЗЯЕВ',p.home+'%')+item('НИЧЬЯ',p.draw+'%')+item('ПОБЕДА ГОСТЕЙ',p.away+'%');
+ out+=item('1X · ХОЗЯЕВА НЕ ПРОИГРАЮТ',p.dc1x+'%')+item('12 · НЕ БУДЕТ НИЧЬЕЙ',p.dc12+'%')+item('X2 · ГОСТИ НЕ ПРОИГРАЮТ',p.dcx2+'%')+'</div>';
+ out+='<div class="section">ГОЛЫ И ТОТАЛЫ</div><div class="picks">';
+ out+=item('ТОТАЛ БОЛЬШЕ 0.5',p.o05+'%')+item('ТОТАЛ БОЛЬШЕ 1.5',p.o15+'%')+item('ТОТАЛ БОЛЬШЕ 2.5',p.o25+'%')+item('ТОТАЛ БОЛЬШЕ 3.5',p.o35+'%')+item('ТОТАЛ МЕНЬШЕ 2.5',p.u25+'%')+item('ОБЕ ЗАБЬЮТ — ДА',p.btts+'%')+item('ОБЕ ЗАБЬЮТ — НЕТ',p.noBtts+'%')+'</div>';
+ out+='<div class="section">ТАЙМЫ И ИНДИВИДУАЛЬНЫЕ ГОЛЫ</div><div class="picks">';
+ out+=item('ГОЛ В 1-М ТАЙМЕ',p.firstHalf+'%')+item('ХОЗЯЕВА ВЕДУТ В ПЕРЕРЫВЕ',p.htHome+'%')+item('НИЧЬЯ В ПЕРЕРЫВЕ',p.htDraw+'%')+item('ХОЗЯЕВА ЗАБЬЮТ',p.homeGoal+'%')+item('ГОСТИ ЗАБЬЮТ',p.awayGoal+'%')+item('ПРИМЕРНЫЙ СЧЁТ',p.score,'Статистический ориентир')+'</div>';
+ out+='<div class="section">УГЛОВЫЕ, КАРТОЧКИ И УДАРЫ</div><div class="picks">';
+ const metric=(label,val,unit)=>item(label,val==null?'Нет данных':val.toFixed(1)+' '+unit,'Среднее по последним матчам');
+ out+=metric('УГЛОВЫЕ · ВСЕГО',p.corners,'шт.')+metric('ЖЁЛТЫЕ КАРТОЧКИ · ВСЕГО',p.cards,'шт.')+metric('УДАРЫ · ВСЕГО',p.shots,'шт.')+metric('УДАРЫ В СТВОР',p.onTarget,'шт.')+metric('ФОЛЫ · ВСЕГО',p.fouls,'шт.')+'</div>';
+ return out;
+}
+function render(){
+ const q=document.getElementById('filter').value.toLowerCase();
+ const list=games.filter(g=>(g.home+' '+g.away+' '+g.league).toLowerCase().includes(q));
+ document.getElementById('count').textContent=list.length+' матчей';
+ if(!list.length){document.getElementById('matches').innerHTML='<div class="empty">'+(games.length?'Ничего не найдено.':'На сегодня матчи не найдены или API не вернул расписание.')+'</div>';return}
+ document.getElementById('matches').innerHTML=list.map(g=>{
+  const p=g.pred;return `<article class="match"><div class="meta"><span>${esc(g.league)}</span><span>${esc(g.time)} · ${esc(g.status)}</span></div><div class="teams"><div class="team">${esc(g.home)}</div><div class="vs">ПРОТИВ</div><div class="team">${esc(g.away)}</div></div>${p?predictionMarkup(p):'<div class="empty" style="margin-top:12px">Недостаточно статистики для расчёта прогнозов</div>'}</article>`
+ }).join('')
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+if(apiKey)loadMatches();
+</script></body></html>
