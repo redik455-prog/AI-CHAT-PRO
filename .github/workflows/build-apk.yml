@@ -1,60 +1,37 @@
-name: Build APK
+name: Сборка MATCH AI APK
 
 on:
-  push:
-    paths:
-      - 'Al-chat-Android-project.zip'
-      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Скачать исходный код
         uses: actions/checkout@v4
 
-      - name: Show archive contents
-        run: |
-          ls -lah
-          unzip -l Al-chat-Android-project.zip | head -80
-
-      - name: Extract project
-        run: |
-          mkdir -p project
-          unzip -o Al-chat-Android-project.zip -d project
-          echo "Extracted files:"
-          find project -maxdepth 5 -type f | head -100
-
-      - name: Find Android project
-        run: |
-          SETTINGS=$(find project -type f -name settings.gradle.kts -print -quit)
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts not found in archive"
-            exit 1
-          fi
-          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
-
-      - name: Set up JDK
+      - name: Установить Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Установить Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
 
-      - name: Build APK
-        run: |
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
+      - name: Собрать Android APK
+        run: gradle --no-daemon assembleDebug
 
-      - name: Upload APK
+      - name: Сохранить APK
         uses: actions/upload-artifact@v4
         with:
-          name: Al-chat-APK
-          path: project/**/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: MATCH-AI-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
