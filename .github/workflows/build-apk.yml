@@ -27,20 +27,23 @@ jobs:
       - name: Установить Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Найти папку Android-проекта
-        id: project
-        shell: bash
+      - name: Распаковать MATCH AI
         run: |
-          FILE=$(find . -name settings.gradle.kts -o -name settings.gradle | head -n 1)
+          unzip -q MATCH_AI_Russian_Expanded.zip -d project
+          echo "Содержимое архива:"
+          find project -maxdepth 3 -type f | head -50
+
+      - name: Найти Android-проект
+        id: project
+        run: |
+          FILE=$(find project -name settings.gradle.kts -o -name settings.gradle | head -n 1)
           if [ -z "$FILE" ]; then
-            echo "Не найден settings.gradle.kts или settings.gradle"
-            echo "Содержимое репозитория:"
-            ls -la
+            echo "Gradle-файлы не найдены в архиве"
             exit 1
           fi
           DIR=$(dirname "$FILE")
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-          echo "Проект найден: $DIR"
+          echo "Найден проект: $DIR"
 
       - name: Собрать APK
         run: gradle --no-daemon -p "${{ steps.project.outputs.dir }}" assembleDebug
