@@ -29,23 +29,39 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Extract Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="FOOTBALL-PRO-Android-GitHub.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ZIP archive not found!"
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -o "$ZIP" -d extracted
+
+          echo "ZIP extracted successfully"
+          find extracted -maxdepth 4 -type f | head -100
+
       - name: Find Android project
         id: project
         shell: bash
         run: |
           set -euo pipefail
 
-          PROJECT_FILE=$(find . \
+          PROJECT_FILE=$(find extracted \
             -type f \
             \( -name settings.gradle.kts -o -name settings.gradle \) \
             -not -path '*/.gradle/*' \
             -not -path '*/build/*' \
-            -not -path '*/.git/*' \
             -print -quit)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "Android project not found!"
-            find . -maxdepth 4 -type f | head -100
+            echo "Android project not found inside ZIP!"
             exit 1
           fi
 
