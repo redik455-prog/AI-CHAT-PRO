@@ -1,11 +1,9 @@
-name: Build AI Crypto Predictor APK
+name: Build and security-check AI Crypto Predictor
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -13,50 +11,66 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Скачать исходный код
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Установить Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Установить Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Распаковать проект
-        run: |
-          unzip -q AI_Crypto_Predictor_v2_Android.zip -d project
-          find project -maxdepth 3 -type f | head -50
-
-      - name: Найти Android проект
+      - name: Locate Android project
         id: project
+        shell: bash
         run: |
-          FILE=$(find project \( -name settings.gradle.kts -o -name settings.gradle \) | head -n 1)
-          if [ -z "$FILE" ]; then
-            echo "Gradle settings not found"
+          set -euo pipefail
+          if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          elif [ -f "AI_Crypto_Predictor_3.0_Android.zip" ]; then
+            mkdir -p project
+            unzip -o "AI_Crypto_Predictor_3.0_Android.zip" -d project
+            echo "dir=project" >> "$GITHUB_OUTPUT"
+          else
+            echo "Android project not found."
             exit 1
           fi
-          DIR=$(dirname "$FILE")
-          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-          echo "Project: $DIR"
-
-      - name: Собрать APK с повторными попытками
+      - name: Verify manifest security baseline
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
         run: |
-          for i in 1 2 3; do
-            gradle --no-daemon -p "${{ steps.project.outputs.dir }}" assembleDebug && exit 0
-            echo "Попытка $i не удалась. Ждём 60 секунд..."
+          set -euo pipefail
+          M="app/src/main/AndroidManifest.xml"
+          grep -q 'android.permission.INTERNET' "$M"
+          ! grep -Eq 'READ_CONTACTS|READ_SMS|SEND_SMS|READ_CALL_LOG|RECORD_AUDIO|CAMERA|ACCESS_FINE_LOCATION|MANAGE_EXTERNAL_STORAGE' "$M"
+          grep -q 'android:usesCleartextTraffic="false"' "$M"
+          grep -q 'android:allowBackup="false"' "$M"
+      - name: Build APK and run Android Lint
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gradle --no-daemon assembleDebug lint; then exit 0; fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Retrying build in 60 seconds ($attempt/3)"
             sleep 60
           done
-          exit 1
-
-      - name: Сохранить APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI-Crypto-Predictor-APK
+          name: AI-Crypto-Predictor-3.0-debug
           path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Android Lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-Lint-Report
+          path: ${{ steps.project.outputs.dir }}/app/build/reports/lint-results*
+          if-no-files-found: ignore
+          retention-days: 14
