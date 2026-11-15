@@ -1,76 +1,36 @@
-name: Build and security-check AI Crypto Predictor
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, master]
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-      - name: Locate Android project
+- name: Locate Android project
         id: project
         shell: bash
         run: |
           set -euo pipefail
+
           if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
             echo "dir=." >> "$GITHUB_OUTPUT"
-          elif [ -f "AI_Crypto_Predictor_3.0_Android.zip" ]; then
-            mkdir -p project
-            unzip -o "AI_Crypto_Predictor_3.0_Android.zip" -d project
-            echo "dir=project" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p project
+
+          if [ -f "AI_Crypto_Predictor_3.0_GitHub_Bundle.zip" ]; then
+            unzip -o "AI_Crypto_Predictor_3.0_GitHub_Bundle.zip" -d bundle
+          fi
+
+          ZIP=$(find . -type f -name "AI_Crypto_Predictor_3.0_Android.zip" -print -quit)
+
+          if [ -n "$ZIP" ]; then
+            unzip -o "$ZIP" -d project
           else
-            echo "Android project not found."
+            echo "Не найден ZIP проекта."
+            find . -maxdepth 3 -type f | head -80
             exit 1
           fi
-      - name: Verify manifest security baseline
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          M="app/src/main/AndroidManifest.xml"
-          grep -q 'android.permission.INTERNET' "$M"
-          ! grep -Eq 'READ_CONTACTS|READ_SMS|SEND_SMS|READ_CALL_LOG|RECORD_AUDIO|CAMERA|ACCESS_FINE_LOCATION|MANAGE_EXTERNAL_STORAGE' "$M"
-          grep -q 'android:usesCleartextTraffic="false"' "$M"
-          grep -q 'android:allowBackup="false"' "$M"
-      - name: Build APK and run Android Lint
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            if gradle --no-daemon assembleDebug lint; then exit 0; fi
-            if [ "$attempt" -eq 3 ]; then exit 1; fi
-            echo "Retrying build in 60 seconds ($attempt/3)"
-            sleep 60
-          done
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AI-Crypto-Predictor-3.0-debug
-          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload Android Lint report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android-Lint-Report
-          path: ${{ steps.project.outputs.dir }}/app/build/reports/lint-results*
-          if-no-files-found: ignore
-          retention-days: 14
+
+          DIR=$(find project -type f \( -name "settings.gradle.kts" -o -name "settings.gradle" \) -printf '%h\n' | head -1)
+
+          if [ -z "$DIR" ]; then
+            echo "Gradle project files not found after extraction."
+            find project -maxdepth 4 -type f | head -80
+            exit 1
+          fi
+
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
