@@ -1,11 +1,5 @@
-- name: Build debug APK
-  run: |
-    for i in 1 2 3; do
-      gradle assembleDebug && exit 0
-      echo "Сервер ограничил запросы. Ждём 30 секунд..."
-      sleep 30
-    done
-    exit 1
+name: Build AI Crypto Predictor APK
+
 on:
   workflow_dispatch:
   push:
@@ -32,30 +26,37 @@ jobs:
 
       - name: Установить Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-      - name: Распаковать MATCH AI
+      - name: Распаковать проект
         run: |
           unzip -q AI_Crypto_Predictor_v2_Android.zip -d project
-          echo "Содержимое архива:"
           find project -maxdepth 3 -type f | head -50
 
-      - name: Найти Android-проект
+      - name: Найти Android проект
         id: project
         run: |
-          FILE=$(find project -name settings.gradle.kts -o -name settings.gradle | head -n 1)
+          FILE=$(find project \( -name settings.gradle.kts -o -name settings.gradle \) | head -n 1)
           if [ -z "$FILE" ]; then
-            echo "Gradle-файлы не найдены в архиве"
+            echo "Gradle settings not found"
             exit 1
           fi
           DIR=$(dirname "$FILE")
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
-          echo "Найден проект: $DIR"
+          echo "Project: $DIR"
 
-      - name: Собрать APK
-        run: gradle --no-daemon -p "${{ steps.project.outputs.dir }}" assembleDebug
+      - name: Собрать APK с повторными попытками
+        run: |
+          for i in 1 2 3; do
+            gradle --no-daemon -p "${{ steps.project.outputs.dir }}" assembleDebug && exit 0
+            echo "Попытка $i не удалась. Ждём 60 секунд..."
+            sleep 60
+          done
+          exit 1
 
       - name: Сохранить APK
         uses: actions/upload-artifact@v4
         with:
-          name: MATCH-AI-APK
+          name: AI-Crypto-Predictor-APK
           path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
