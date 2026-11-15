@@ -1,5 +1,11 @@
-name: Сборка MATCH AI APK
-
+- name: Build debug APK
+  run: |
+    for i in 1 2 3; do
+      gradle assembleDebug && exit 0
+      echo "Сервер ограничил запросы. Ждём 30 секунд..."
+      sleep 30
+    done
+    exit 1
 on:
   workflow_dispatch:
   push:
