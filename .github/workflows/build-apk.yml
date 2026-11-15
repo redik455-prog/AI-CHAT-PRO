@@ -29,7 +29,7 @@ jobs:
 
       - name: Распаковать MATCH AI
         run: |
-          unzip -q MATCH_AI_Russian_Expanded.zip -d project
+          unzip -q AI_Crypto_Predictor_v2_Android.zip -d project
           echo "Содержимое архива:"
           find project -maxdepth 3 -type f | head -50
 
