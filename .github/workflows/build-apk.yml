@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP="FOOTBALL-PRO-Android-GitHub.zip"
+          ZIP="FOOTBALL-PRO-Android-FIXED.zip"
 
           if [ ! -f "$ZIP" ]; then
             echo "ZIP archive not found!"
